@@ -1,8 +1,36 @@
+"""Smoke tests for FraudAudit — unsupervised anomaly detection."""
 from __future__ import annotations
 import sys; from pathlib import Path; sys.path.insert(0, str(Path(__file__).parent.parent))
-import numpy as np; from src.data import make_synthetic; from src.model import train_all_models, cross_validate
-def test_data(): d=make_synthetic(500); assert d["X"].shape[0]==500 and 0.01<d["positive_rate"]<0.20
-def test_train(): d=make_synthetic(300); b=train_all_models(d); assert len(b["models"])==4
-def test_xgb(): d=make_synthetic(300); assert train_all_models(d)["results"]["XGBoost"]["metrics"].get("roc_auc",0)>0.5
-def test_cv(): d=make_synthetic(1000); cv=cross_validate(d,seed=42,n_folds=3); assert all(s["roc_auc"]["mean"]>0.5 for s in cv.values())
-def test_metrics(): d=make_synthetic(200); b=train_all_models(d); m=b["results"]["XGBoost"]["metrics"]; assert all(0<=m[k]<=1 for k in ["accuracy","precision","recall","f1"])
+from src.data import make_synthetic; from src.model import fit_and_evaluate
+from src.core import precision_at_k, recall_at_k, mahalanobis_distance
+
+
+def test_data():
+    d = make_synthetic(200)
+    assert d["n_samples"] == 200 and 0.01 < d["anomaly_rate"] < 0.15
+
+
+def test_precision():
+    assert precision_at_k([5, 4, 3, 2, 1], [1, 1, 0, 0, 0], 3) > 0.5
+
+
+def test_recall():
+    assert recall_at_k([5, 4, 3, 2, 1], [1, 1, 0, 0, 0], 3) > 0.3
+
+
+def test_mahalanobis():
+    import numpy as np
+    X = np.array([[0, 0], [0, 0], [0, 0], [10, 10]])
+    dists = mahalanobis_distance(X)
+    assert dists[3] > dists[0]
+
+
+def test_fit():
+    d = make_synthetic(200)
+    m, met = fit_and_evaluate(d)
+    assert "iso_precision@50" in met
+
+
+if __name__ == "__main__":
+    test_data(); test_precision(); test_recall(); test_mahalanobis(); test_fit()
+    print("All FraudAudit smoke tests passed!")
